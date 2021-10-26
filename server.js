@@ -6,51 +6,17 @@ require("dotenv").config() // brings in .env vars
 const express = require("express") // web framework
 const morgan = require("morgan") // logger
 const methodOverride = require("method-override") // to swap request methods
-const mongoose = require("mongoose") // our database library
+
 const path = require("path") // helper functions for file paths
+const FruitsRouter = require("./controllers/fruit")
+const UserRouter = require("./controllers/user")
+const session = require("express-session")// session middleware
+const MongoStore = require("connect-mongo")// save sessions in mongodb
 
 
-//////////////////////////////////
-//ESTABLISH DATABASE CONNECTION
-//////////////////////////////////
-// setup the inputs for mongoose connect
-const DATABASE_URL = process.env.DATABASE_URL // url from .env
-const CONFIG = {  // CONFIG will stop deprecation warnings
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}
-
-// Connect to Mongo  //  CONFIG will stop deprecation warnings
-mongoose.connect(DATABASE_URL, CONFIG)
-
-//our connection messages
-mongoose.connection
-.on("open", () => console.log("Connected to Mongo"))
-.on("close", () => console.log("disconnected from mongo"))
-.on("error", (error) => console.log(error))
 
 
-////////////////////////////////////
-// CREATE OUR FRUITS MODEL
-////////////////////////////////////
-//destructuring Schema and model from mongoose
-// const Schema = mongoose.Schema
-//const model = mongoose.Model
-const {Schema, model} = mongoose // destructured version of above variables
 
-//make a fruits schema // new = constructor
-const fruitSchema = new Schema({
-    name: String,
-    color: String,
-    readyToEat: Boolean
-})
-
-// make the fruit model - this allows you to use restful routes/ get /find
-//models should be uppercase
-const Fruit = model("Fruit", fruitSchema)
-
-// log the model to make sure it works // always practice console logging
-// console.log(Fruit)
 
 /////////////////////////////////
 // CREATE OUR APP WITH OBJECT, CONFIGURE LIQUID
@@ -78,153 +44,24 @@ app.use(methodOverride("_method"))
 app.use(express.urlencoded({extended: true}))
 // setup our public folder to serve files statically
 app.use(express.static("public"))
+// middleware to create sessions (req.session)
+app.use(session({
+    secret: process.env.SECRET,
+    store: MongoStore.create({mongoUrl: process.env.DATABASE_URL}),
+    resave: false
+    
+}))
 
-///////////////////////////////////////
+
 // ROUTES
-////////////////////////////////////////
 app.get("/", (req, res) => {
-    res.send("your server is running.. better catch it")
+    res.render("index.liquid")
 })
+// REGISTER FRUITS ROUTER
+app.use("/fruits", FruitsRouter)
 
-/////////////////////////
-// FRUITS ROUTE
-//////////////////////////
-// SEED ROUTE - seed our starter data
-app.get("/fruits/seed", (req, res) => {
-    // array of start fruits
-    const startFruits = [
-        { name: "Orange", color: "orange", readyToEat: false },
-        { name: "Grape", color: "purple", readyToEat: false },
-        { name: "Banana", color: "orange", readyToEat: false },
-        { name: "Strawberry", color: "red", readyToEat: false },
-        { name: "Coconut", color: "brown", readyToEat: false },
-      ];
-      // delete all fruits
-    Fruit.deleteMany({})
-    .then((data) => {
-        // seed starter fruits
-        Fruit.create(startFruits)
-        .then((data) => {
-            res.json(data)
-        })
-    })
-})
-
-//INDEX ROUTE - GET - /fruits
-app.get("/fruits", (req, res) => {
-    // find all the fruits
-    Fruit.find({})
-        .then((fruits) => {
-            //render the index template with the fruits
-            res.render("fruits/index.liquid", {fruits}) // same as {fruits: fruits}
-        })
-        // error handling
-        .catch((error) => {
-            res.json({error})
-        })
-})
-
-///////////////////////////////////////
-// NEW ROUTE - GET request - "/fruits/new -purpose is to generate a form to add new content
-//////////////////////////////////////
-app.get("/fruits/new", (req, res) => {
-    res.render("fruits/new.liquid")
-})
-
-///////////////////////////////////
-// Create route - post request - /fruits
-///////////////////////////////////
-app.post("/fruits", (req, res) => {
-    //convert the checkbox property to true or false
-    req.body.readyToEat = req.body.readyToEat === "on" ? true : false
-
-    // create the new fruit
-    Fruit.create(req.body)
-    .then((fruit) => {
-        // redirect user back to index route
-        res.redirect("/fruits")
-    })
-    // error handling
-    .catch((error) => {
-        res.json({error})
-    })
-})
-
-////////////////////////////////
-// EDIT ROUTE - get request - /fruits/:id/edit - generates a form
-////////////////////////////////
-app.get("/fruits/:id/edit", (req, res) => {
-    //get the id from params
-    const id = req.params.id
-    //get the fruit with the matching id
-    Fruit.findById(id)
-    .then((fruit) => {
-        //render the edit page template with the fruit data
-        res.render("fruits/edit.liquid", {fruit})
-    })
-    // error handling
-    .catch((error) => {
-        res.json({error})
-    })
-})
-
-//////////////////////////////////////
-// UPDATE ROUTE - PUT request - /fruits/:id
-/////////////////////////////////////
-app.put("/fruits/:id", (req, res) => {
-    //get the id from params
-    const id = req.params.id
-    //conver checkbox property to true or false
-    req.body.readyToEat = req.body.readyToEat === "on" ? true : false
-    // update the item with matching id
-    Fruit.findByIdAndUpdate(id, req.body, {new: true})
-    .then((fruit) => {
-        // redirect user back to index
-        res.redirect("/fruits")
-    })
-    // error handling
-    .catch((error) => {
-        res.json({error})
-    })
-})
-
-/////////////////////////////
-// DESTROY ROUTE - delete request - /fruits/:id
-/////////////////////////////
-app.delete("/fruits/:id", (req, res) => {
-    //grab the id from params
-    const id = req.params.id
-    // delete the fruit
-    Fruit.findByIdAndRemove(id)
-    .then((fruit) => {
-        //redirect user back to index
-        res.redirect("/fruits")
-    })
-    // error handling
-    .catch((error) => {
-        res.json({error})
-    })
-})
-
-
-
-// SHOW ROUTE - get - /fruits/:id
-app.get("/fruits/:id", (req, res) => {
-    //get the id from params
-    const id = req.params.id
-
-    // get that particular fruit from the database
-    Fruit.findById(id)
-    .then((fruit) => {
-        // render the show page with said fruit
-        res.render("fruits/show.liquid", {fruit})
-    })
-    // error handling
-    .catch((error) => {
-        res.json({error})
-    })
-})
-
+// REGISTER USER ROUTER
+app.use("/user", UserRouter)
 
 ////////////////////////////////////////
 // SETUP SERVER LISTENER
